@@ -1,0 +1,21 @@
+# One repo = one cell = one function. Which cell's view opens a ce-ref, for this viewer: opener table from
+# repo:ce-net-net opens(), filtered by the viewer's chain and the openers' liveness (CE-REF-OPENERS-AND-HOME 3.2).
+[cell]
+api = "open.with"
+crate = "open-with"
+args = ["serve"]
+kind = "function"
+owner = "foreman/win-2c3d"
+keep = true
+depends_on = []
+
+[launch]
+health = "HealthOp"
+start_timeout_ms = 5000
+restart_backoff_ms = [1000, 300000]
+
+[placement]
+# the REFS system in repo:ce-net-net (replicas 2)
+
+[limits]
+disk_bytes = "16M"

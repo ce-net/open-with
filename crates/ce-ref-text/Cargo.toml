@@ -1,0 +1,9 @@
+[package]
+name = "ce-ref-text"
+version = "0.1.0"
+description = "The two written forms of a ce-ref (short kind:target[@pin][#frag], full ce-ref://kind/...), the type string openers match, and finding refs in text"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
