@@ -19,3 +19,16 @@ restart_backoff_ms = [1000, 300000]
 
 [limits]
 disk_bytes = "16M"
+
+[stamp]
+id = "cell:open.with"
+kind = "cell"
+path = "cell.toml"
+updated_at = 2026-11-18T17:14:58Z
+version = "0.5"
+access = "public"
+canonical_of = []
+duplicate_of = ""
+owner = "foreman/win-2c3d"
+source_of_truth = "https://github.com/ce-net/open-with"
+stale_after = 180
