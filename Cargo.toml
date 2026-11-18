@@ -11,7 +11,7 @@ publish = false
 ce-wire = { git = "https://github.com/Leif-Rydenfalk/rust-stack", rev = "d283bd528f96effabcf4dec56eb4fad1bec08d27" }
 ce-gate = { git = "https://github.com/Leif-Rydenfalk/rust-stack", rev = "d283bd528f96effabcf4dec56eb4fad1bec08d27" }
 ui-chain = { git = "https://github.com/ce-net/ui-cells", rev = "103703220a8554d07af1ed6a1eea5ef0e5a72090" }
-ce-net-net = { git = "https://github.com/ce-net/ce-net-net", rev = "19249b1f0e4c862178f0ab679380111f18860f5f" }
+ce-net-net = { git = "https://github.com/ce-net/ce-net-net", rev = "02ef21438255c89335e2299109a2846b0162c63d" }
 
 [profile.release]
 lto = "thin"

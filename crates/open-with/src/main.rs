@@ -62,10 +62,17 @@ async fn live(cache: &LiveCache, cell: &str, major: u16) -> bool {
             return *ok;
         }
     }
-    let ok = match tokio::time::timeout(Duration::from_millis(2500), ce_wire::find::find_async(cell, major)).await {
-        Ok(Some(Ok(r))) => r.replicas.iter().any(|x| x.healthy_ms <= HEALTHY_MS),
-        _ => false,
+    let ask = |m: u16| async move {
+        match tokio::time::timeout(Duration::from_millis(2500), ce_wire::find::find_async(cell, m)).await {
+            Ok(Some(Ok(r))) => r.replicas.iter().any(|x| x.healthy_ms <= HEALTHY_MS),
+            _ => false,
+        }
     };
+    // net.find files a replica under the version its door registry row carries, which is "1" for a cell whose api is
+    // a later major (crm.calls api 2 answers Find(crm.calls, 2) with NoStartSpec, measured 2026-11-18 on
+    // foreman-ops-1): when the line's major finds nothing, a replica filed under 1 counts. The schema still decides
+    // when the view's data call is made.
+    let ok = ask(major).await || (major > 1 && ask(1).await);
     cache.lock().unwrap().insert(key, (ok, Instant::now()));
     ok
 }
