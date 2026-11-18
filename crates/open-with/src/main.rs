@@ -126,7 +126,10 @@ async fn with_commit(r: &CeRef) -> Result<CeRef, String> {
 
 enum Resolved {
     Ok { r: CeRef, sha256: Option<String> },
+    /// The resolver answered: no such thing (a normal answer).
     Unknown(String),
+    /// The resolver could not be asked or did not answer (a fault of this node, logged as an error).
+    Fault(String),
 }
 
 async fn resolve_repo(r: &CeRef) -> Resolved {
@@ -138,22 +141,29 @@ async fn resolve_repo(r: &CeRef) -> Resolved {
     let written = CeRef { frag: None, ..r.clone() }.to_string();
     let tok = match ui_chain::source_token::<RefResolve>(&["ref.resolve:read"], 60, None) {
         Ok(t) => t,
-        Err(e) => return Resolved::Unknown(format!("open.with cannot ask ref.resolve: {e}")),
+        Err(e) => return Resolved::Fault(format!("open.with cannot ask ref.resolve: {e}")),
     };
     let c = match tokio::time::timeout(Duration::from_secs(4), ce_wire::Client::<RefResolve>::by_name(tok)).await {
         Ok(Ok(c)) => c,
-        _ => return Resolved::Unknown("ref.resolve did not answer in 4 s".into()),
+        _ => return Resolved::Fault("ref.resolve did not answer in 4 s".into()),
     };
     match c.call::<Resolve>(&ResolveReq { reference: written.clone() }).await {
         Ok(Ok(Resolution::Located(l))) => Resolved::Ok { sha256: l.pin.map(|p| p.trim_start_matches("sha256:").to_string()), r },
         Ok(Ok(Resolution::Unknown { reason, .. })) => Resolved::Unknown(reason),
         Ok(Ok(Resolution::Ambiguous { reason, .. })) => Resolved::Unknown(reason),
-        Ok(Err(e)) => Resolved::Unknown(format!("ref.resolve: {e:?}")),
-        Err(e) => Resolved::Unknown(format!("ref.resolve: {e}")),
+        Ok(Err(e)) => Resolved::Fault(format!("ref.resolve: {e:?}")),
+        Err(e) => Resolved::Fault(format!("ref.resolve: {e}")),
     }
 }
 
-async fn open(cache: &LiveCache, req: api::OpenReq, who: &ce_wire::Caller) -> api::Opened {
+/// The answer, and whether it came from a fault of this node (resolver unreachable) rather than a normal answer.
+async fn open(cache: &LiveCache, req: api::OpenReq, who: &ce_wire::Caller) -> (api::Opened, bool) {
+    let mut fault = false;
+    let out = open_inner(cache, req, who, &mut fault).await;
+    (out, fault)
+}
+
+async fn open_inner(cache: &LiveCache, req: api::OpenReq, who: &ce_wire::Caller, fault: &mut bool) -> api::Opened {
     let r: CeRef = req.r.clone().into();
     if !KINDS.contains(&r.kind.as_str()) {
         return api::Opened::Unknown { reason: format!("no kind {:?} in the kind table", r.kind) };
@@ -166,6 +176,10 @@ async fn open(cache: &LiveCache, req: api::OpenReq, who: &ce_wire::Caller) -> ap
         match resolve_repo(&r).await {
             Resolved::Ok { r: resolved, sha256 } => (CeRef { frag: r.frag.clone(), ..resolved }, sha256),
             Resolved::Unknown(reason) => return api::Opened::Unknown { reason },
+            Resolved::Fault(reason) => {
+                *fault = true;
+                return api::Opened::Unknown { reason };
+            }
         }
     } else {
         (r, None)
@@ -205,14 +219,18 @@ async fn serve() -> Result<(), String> {
             async move {
                 let t0 = Instant::now();
                 let r = req.r.short();
-                let out = open(&cache, req, &who).await;
+                let (out, fault) = open(&cache, req, &who).await;
                 let what = match &out {
                     api::Opened::Target { view, .. } => format!("target {view}"),
                     api::Opened::Refused { need, .. } => format!("refused, needs {need}"),
                     api::Opened::NoOpener { ty } => format!("no opener of {ty}"),
                     api::Opened::Unknown { reason } => format!("unknown: {}", reason.chars().take(120).collect::<String>()),
                 };
-                eprintln!("open.with: {} {r}: {what} in {} ms", who.name, t0.elapsed().as_millis());
+                // A refusal, no opener or an unknown ref is a correct answer, not a fault: "info: " keeps it out of
+                // error.collect (error reports 2dcaf039877ce037, 8b4c9b80ccc7fbe0, 711b66d2e22a156d, 3159d2c2af91b218).
+                // Only a resolver this node could not reach stays an error line.
+                let level = if fault { "error" } else { "info" };
+                eprintln!("open.with: {level}: {} {r}: {what} in {} ms", who.name, t0.elapsed().as_millis());
                 Ok(out)
             }
         })
